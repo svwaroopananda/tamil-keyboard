@@ -4,6 +4,14 @@ options:
   deploymentTarget:
     iOS: "17.0"
 
+# Local Swift package holding shared, non-UI logic (currently just
+# TranslationClient) -- both targets below depend on it so the keyboard
+# extension, the host app, and any future feature (e.g. an App Intent)
+# all share one implementation instead of each having its own copy.
+packages:
+  TamilCore:
+    path: TamilCore
+
 targets:
   # The host app. This is what appears on the home screen and in App
   # Store search. Its job right now is just onboarding: tell the user
@@ -33,6 +41,7 @@ targets:
     dependencies:
       - target: KeyboardExtension
         embed: true
+      - package: TamilCore
 
   # The keyboard extension itself. A separate binary that iOS loads
   # into whatever app the user is typing in (Messages, WhatsApp, etc.)
@@ -71,3 +80,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.svwaroopananda.tamilkeyboard.keyboard
         SKIP_INSTALL: NO
+    dependencies:
+      - package: TamilCore

@@ -49,9 +49,16 @@ default, since a keyboard sees everything a user types).
 ## Project structure
 
 ```
-backend/    Node/Express server — the only thing holding the Claude API key
-ios/        Xcode project: host app target + keyboard extension target
-  project.yml   xcodegen spec — source of truth for both targets
+backend/          Node/Express server — the only thing holding the Claude API key
+ios/               Xcode project: host app target + keyboard extension target
+  project.yml       xcodegen spec — source of truth for both targets
+  TamilCore/         local Swift package: shared TranslationClient, used by both
+                      targets (and any future one, e.g. an App Intent) -- see
+                      `swift test` in step 4 below. Run standalone, no Xcode needed.
+docs/decisions/    Architecture Decision Records -- the why behind non-obvious
+                    choices (extracting TamilCore, the in-flight-request guard,
+                    status-code-based error handling). Worth reading before
+                    changing any of those areas.
 ```
 
 ## Setup
@@ -102,7 +109,21 @@ curl -X POST http://localhost:3000/translate \
   -d '{"text": "What are you doing right now?"}'
 ```
 
-### 4. Generate and open the Xcode project
+### 4. Run TamilCore's unit tests
+
+`ios/TamilCore` is a standalone Swift package — its test suite runs without
+Xcode, a simulator, or the backend:
+
+```bash
+cd ios/TamilCore
+swift test
+```
+
+See [`docs/decisions/`](docs/decisions/) for the reasoning behind how
+`TranslationClient` handles errors and duplicate requests, if you're
+touching that code.
+
+### 5. Generate and open the Xcode project
 
 The `.xcodeproj` is generated from `ios/project.yml` via
 [XcodeGen](https://github.com/yonaskolb/XcodeGen) and is not committed to
@@ -115,7 +136,7 @@ xcodegen generate
 open TamilKeyboard.xcodeproj
 ```
 
-### 5. Select your development team for signing
+### 6. Select your development team for signing
 
 In Xcode:
 
@@ -132,13 +153,13 @@ change `PRODUCT_BUNDLE_IDENTIFIER` (and `bundleIdPrefix`) in
 `ios/project.yml` to your own reverse-DNS string, then re-run
 `xcodegen generate`.
 
-### 6. Run in Simulator
+### 7. Run in Simulator
 
 With the backend still running locally (step 3), select the
 **TamilKeyboardApp** scheme in Xcode and run it (`Cmd+R`) on any simulator.
 This installs both the host app and the keyboard extension.
 
-### 7. Enable the keyboard (manual, one-time, per simulator/device)
+### 8. Enable the keyboard (manual, one-time, per simulator/device)
 
 1. In the Simulator, open **Settings → General → Keyboard → Keyboards →
    Add New Keyboard...** and select **Tamil Keyboard**.
@@ -153,6 +174,9 @@ This installs both the host app and the keyboard extension.
 
 `http://localhost:3000` only resolves to your Mac when run in the
 **Simulator**, which shares your Mac's network stack. On a physical device,
-`localhost` refers to the device itself — update `backendURL` in
-`KeyboardViewController.swift` to your Mac's LAN IP (or a deployed backend
-URL) instead.
+`localhost` refers to the device itself — update
+`TranslationClient.defaultBaseURL` in
+`ios/TamilCore/Sources/TamilCore/TranslationClient.swift` (the one place
+the backend's address is defined — see
+[`docs/decisions/0001-extract-tamilcore-shared-package.md`](docs/decisions/0001-extract-tamilcore-shared-package.md))
+to your Mac's LAN IP (or a deployed backend URL) instead.

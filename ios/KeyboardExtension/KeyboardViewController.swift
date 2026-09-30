@@ -1,151 +1,220 @@
 import UIKit
+import TamilCore
 
 class KeyboardViewController: UIInputViewController {
 
-    private let inputTextView = UITextView()
-    private let translateButton = UIButton(type: .system)
-    private let statusLabel = UILabel()
-    private let nextKeyboardButton = UIButton(type: .system)
+    private static let messageBarHeight: CGFloat = 24
 
-    // Simulator shares the Mac's network stack, so localhost correctly
-    // reaches the Express server running on the host machine. This will
-    // need to become the Mac's LAN IP (or a deployed URL) for testing on
-    // a physical device.
-    private let backendURL = URL(string: "http://localhost:3000/translate")!
+    private var engine = KeyboardEngine()
+    private let translationClient = TranslationClient()
+
+    // VC-level flag purely for immediate, synchronous UI feedback (disabling
+    // the key view the instant Translate is tapped) -- separate from, and
+    // in addition to, TranslationClient's own actor-internal in-flight
+    // guard, which remains the actual correctness backstop. Same
+    // "UI disables eagerly, package enforces definitively" pattern used
+    // elsewhere in this codebase.
+    private var isTranslating = false
+
+    private let layoutView = KeyboardLayoutView()
+    private let messageLabel = UILabel()
+    private var messageDismissWorkItem: DispatchWorkItem?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        wireCallbacks()
     }
 
     override func viewWillLayoutSubviews() {
-        nextKeyboardButton.isHidden = !needsInputModeSwitchKey
+        layoutView.setGlobeVisible(needsInputModeSwitchKey)
         super.viewWillLayoutSubviews()
     }
+
+    // A courtesy notification from the system that the document may have
+    // changed -- not guaranteed to fire for every host app (some
+    // WebView-backed text fields don't fire it reliably), so this is only
+    // a soft signal that resets stale tracking promptly. The authoritative
+    // check happens again, synchronously, right before the translate flow
+    // actually deletes/inserts anything.
+    override func textDidChange(_ textInput: UITextInput?) {
+        super.textDidChange(textInput)
+        _ = engine.prepareTranslateRequest(documentContextBeforeInput: textDocumentProxy.documentContextBeforeInput)
+    }
+
+    // MARK: - Setup
 
     private func setupUI() {
         view.backgroundColor = .systemGray6
 
-        inputTextView.font = .systemFont(ofSize: 16)
-        inputTextView.layer.cornerRadius = 8
-        inputTextView.layer.borderWidth = 1
-        inputTextView.layer.borderColor = UIColor.systemGray4.cgColor
-        inputTextView.autocorrectionType = .no
-        inputTextView.translatesAutoresizingMaskIntoConstraints = false
+        messageLabel.font = .systemFont(ofSize: 12)
+        messageLabel.textColor = .secondaryLabel
+        messageLabel.textAlignment = .center
+        messageLabel.numberOfLines = 1
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        translateButton.setTitle("Translate", for: .normal)
-        translateButton.titleLabel?.font = .boldSystemFont(ofSize: 16)
-        translateButton.backgroundColor = .systemBlue
-        translateButton.setTitleColor(.white, for: .normal)
-        translateButton.layer.cornerRadius = 8
-        translateButton.translatesAutoresizingMaskIntoConstraints = false
-        translateButton.addTarget(self, action: #selector(translateTapped), for: .touchUpInside)
+        view.addSubview(messageLabel)
+        view.addSubview(layoutView)
 
-        statusLabel.font = .systemFont(ofSize: 12)
-        statusLabel.textColor = .secondaryLabel
-        statusLabel.textAlignment = .center
-        statusLabel.numberOfLines = 0
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            view.heightAnchor.constraint(equalToConstant: Self.messageBarHeight + KeyboardLayoutView.height),
 
-        // Apple requires every custom keyboard to offer a way back to the
-        // system keyboard (or the next one in the user's list). This
-        // button doesn't implement that logic itself -- it just calls
-        // handleInputModeList(from:with:), which UIInputViewController
-        // already provides: tap cycles to the next keyboard, long-press
-        // shows the full picker, matching stock keyboard behavior.
-        nextKeyboardButton.setImage(UIImage(systemName: "globe"), for: .normal)
-        nextKeyboardButton.tintColor = .label
-        nextKeyboardButton.translatesAutoresizingMaskIntoConstraints = false
-        nextKeyboardButton.addTarget(
+            messageLabel.topAnchor.constraint(equalTo: view.topAnchor),
+            messageLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            messageLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            messageLabel.heightAnchor.constraint(equalToConstant: Self.messageBarHeight),
+
+            layoutView.topAnchor.constraint(equalTo: messageLabel.bottomAnchor),
+            layoutView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            layoutView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            layoutView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        layoutView.globeButton.addTarget(
             self,
             action: #selector(handleInputModeList(from:with:)),
             for: .allTouchEvents
         )
-
-        view.addSubview(inputTextView)
-        view.addSubview(translateButton)
-        view.addSubview(statusLabel)
-        view.addSubview(nextKeyboardButton)
-
-        NSLayoutConstraint.activate([
-            // Keyboard extensions size their own view -- there's no
-            // storyboard/window controlling height, so we fix one
-            // explicitly. Too tall and iOS will clip or reject the layout.
-            view.heightAnchor.constraint(equalToConstant: 240),
-
-            nextKeyboardButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
-            nextKeyboardButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            nextKeyboardButton.widthAnchor.constraint(equalToConstant: 28),
-            nextKeyboardButton.heightAnchor.constraint(equalToConstant: 28),
-
-            inputTextView.topAnchor.constraint(equalTo: nextKeyboardButton.bottomAnchor, constant: 8),
-            inputTextView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            inputTextView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            inputTextView.heightAnchor.constraint(equalToConstant: 100),
-
-            translateButton.topAnchor.constraint(equalTo: inputTextView.bottomAnchor, constant: 8),
-            translateButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            translateButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            translateButton.heightAnchor.constraint(equalToConstant: 44),
-
-            statusLabel.topAnchor.constraint(equalTo: translateButton.bottomAnchor, constant: 4),
-            statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-        ])
     }
 
-    @objc private func translateTapped() {
-        // hasFullAccess reflects whether the user has granted our keyboard
-        // Full Access in Settings. Without it, the URLSession call below
-        // would fail at the sandbox level -- checking first lets us show
-        // a clear message instead of a confusing network error.
+    private func wireCallbacks() {
+        layoutView.onCharacter = { [weak self] character in
+            self?.type(character)
+        }
+        layoutView.onShiftTap = { [weak self] in
+            self?.toggleShift()
+        }
+        layoutView.onBackspaceDown = { [weak self] in
+            self?.backspace()
+        }
+        layoutView.onLayerToggleTap = { [weak self] in
+            self?.toggleLayer()
+        }
+        layoutView.onTranslateTap = { [weak self] in
+            Task { await self?.translateTapped() }
+        }
+    }
+
+    // MARK: - Typing (every key types directly into the host app's field)
+
+    private func type(_ character: Character) {
+        let inserted = engine.type(character)
+        textDocumentProxy.insertText(String(inserted))
+    }
+
+    private func toggleShift() {
+        engine.toggleShift()
+        layoutView.setShiftHighlighted(engine.shiftState == .shiftedOnce)
+    }
+
+    private func backspace() {
+        engine.backspace()
+        textDocumentProxy.deleteBackward()
+    }
+
+    private func toggleLayer() {
+        let newLayer: KeyboardEngine.Layer = (engine.layer == .letters) ? .numbers : .letters
+        engine.switchLayer(to: newLayer)
+        layoutView.setLayer(newLayer)
+    }
+
+    // MARK: - Translate
+
+    private func translateTapped() async {
+        guard !isTranslating else { return }
+
         guard hasFullAccess else {
-            statusLabel.text = "Enable \"Allow Full Access\" for this keyboard in Settings to use translation."
+            showMessage("Enable \"Allow Full Access\" for this keyboard in Settings to use translation.")
             return
         }
 
-        let englishText = inputTextView.text ?? ""
-        guard !englishText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let availability = engine.prepareTranslateRequest(
+            documentContextBeforeInput: textDocumentProxy.documentContextBeforeInput
+        )
+
+        let textToTranslate: String
+        switch availability {
+        case .ready(let text):
+            textToTranslate = text
+        case .nothingToTranslate:
+            showMessage("Type something to translate.")
+            return
+        case .tooLong:
+            showMessage("Message too long to translate.")
+            return
+        case .contextUnavailable:
+            showMessage("Translation isn't available in this text field.")
             return
         }
 
-        translateButton.isEnabled = false
-        statusLabel.text = "Translating..."
+        isTranslating = true
+        layoutView.setTranslating(true)
 
-        var request = URLRequest(url: backendURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["text": englishText])
+        do {
+            let tamil = try await translationClient.translate(textToTranslate)
+            replaceTrackedEnglish(withTamil: tamil, expecting: textToTranslate)
+        } catch {
+            showMessage(friendlyMessage(for: error))
+        }
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                self?.handleResponse(data: data, error: error)
-            }
-        }.resume()
+        isTranslating = false
+        layoutView.setTranslating(false)
     }
 
-    private func handleResponse(data: Data?, error: Error?) {
-        translateButton.isEnabled = true
+    // Re-validates, synchronously and authoritatively, right before
+    // mutating anything -- textDidChange alone isn't trusted, since it
+    // doesn't fire reliably for every host app.
+    private func replaceTrackedEnglish(withTamil tamil: String, expecting expectedEnglish: String) {
+        let availability = engine.prepareTranslateRequest(
+            documentContextBeforeInput: textDocumentProxy.documentContextBeforeInput
+        )
 
-        if let error = error {
-            statusLabel.text = "Network error: \(error.localizedDescription)"
+        guard case .ready(let currentText) = availability, currentText == expectedEnglish else {
+            showMessage("Text changed, please try again.")
             return
         }
 
-        guard let data = data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            statusLabel.text = "Unexpected response from server."
-            return
+        for _ in expectedEnglish {
+            textDocumentProxy.deleteBackward()
+        }
+        textDocumentProxy.insertText(tamil)
+        engine.resetAfterTranslation()
+    }
+
+    private func friendlyMessage(for error: Error) -> String {
+        guard let translationError = error as? TranslationError else {
+            return "Something went wrong. Please try again."
         }
 
-        if let tamil = json["tamil"] as? String {
-            textDocumentProxy.insertText(tamil)
-            inputTextView.text = ""
-            statusLabel.text = ""
-        } else if let errorMessage = json["error"] as? String {
-            statusLabel.text = errorMessage
-        } else {
-            statusLabel.text = "Unexpected response from server."
+        switch translationError {
+        case .emptyInput:
+            return "Type something to translate."
+        case .backendUnreachable:
+            return "Can't reach the translation server. Check it's running."
+        case .unexpectedStatusCode(_, let message):
+            return message ?? "Translation failed. Please try again."
+        case .malformedResponse:
+            return "Got an unexpected response. Please try again."
+        case .requestInFlight:
+            return "Still translating, one sec..."
         }
+    }
+
+    private func showMessage(_ text: String) {
+        messageDismissWorkItem?.cancel()
+
+        messageLabel.text = text
+        messageLabel.alpha = 0
+        UIView.animate(withDuration: 0.15) {
+            self.messageLabel.alpha = 1
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.3) {
+                self?.messageLabel.alpha = 0
+            }
+        }
+        messageDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: workItem)
     }
 }
