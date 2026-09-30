@@ -1,0 +1,72 @@
+[
+  {
+    "input": "you coming or not?",
+    "expected": "Nee varra illaya?",
+    "category": "question",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "omg no way",
+    "expected": "Aiyyo, appadiya!",
+    "category": "reaction",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "let's go now",
+    "expected": "Ippove poalam",
+    "category": "plans",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "already?",
+    "expected": "Already ah?",
+    "category": "question",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "morning da, sleep well?",
+    "expected": "Morning da, nalla thoongiyacha?",
+    "category": "greeting",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "so cute",
+    "expected": "Romba cute ah irukku",
+    "category": "reaction",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "can we talk later?",
+    "expected": "Naama appuram pesalama?",
+    "category": "plans",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "you there?",
+    "expected": "Nee irukkaya?",
+    "category": "question",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "that's crazy",
+    "expected": "Adhu semma crazy da",
+    "category": "reaction",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  },
+  {
+    "input": "see you soon",
+    "expected": "Konjam neram la pakalam",
+    "category": "greeting",
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
+  }
+]

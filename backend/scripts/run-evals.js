@@ -1,13 +1,14 @@
 // scripts/run-evals.js
 //
-// Runs every entry in evals/tanglish.json against the live backend,
-// grades each scored case two ways -- exact/variant string match, and a
-// separate "LLM as judge" call to a larger model grading against a
-// rubric -- and writes the full results to evals/results/<timestamp>.md
-// and .json. Only the two summary scores and the saved file path are
-// printed to the console; earlier per-case console output got garbled in
-// a narrow terminal, so the full detail now lives in the saved files
-// instead, which can be opened in an editor.
+// Runs every entry in an eval file (default evals/tanglish.json; pass
+// --file evals/tanglish-holdout.json for the holdout set) against the
+// live backend, grades each scored case two ways -- exact/variant string
+// match, and a separate "LLM as judge" call to a larger model grading
+// against a rubric -- and writes the full results to
+// evals/results/<timestamp>.md and .json. Only the summary scores and the
+// saved file path are printed to the console; earlier per-case console
+// output got garbled in a narrow terminal, so the full detail now lives
+// in the saved files instead, which can be opened in an editor.
 //
 // Entries marked "reviewed": true count toward both scores. Entries
 // marked "inPrompt": true are excluded from both scores even if
@@ -15,6 +16,12 @@
 // backend/server.js's SYSTEM_PROMPT, so scoring them would measure
 // memorization, not generalization. They're still run and saved to the
 // results file, labeled, for visibility.
+//
+// The translation model is read from TRANSLATION_MODEL the same way
+// server.js reads it, so the label in the results file always matches
+// whatever the running backend is actually using -- run this against a
+// server started with TRANSLATION_MODEL=claude-sonnet-5 to eval that
+// model instead of the default.
 
 const fs = require('fs');
 const path = require('path');
@@ -23,19 +30,32 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const Anthropic = require('@anthropic-ai/sdk');
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3000';
-const EVALS_PATH = path.join(__dirname, '..', 'evals', 'tanglish.json');
 const RESULTS_DIR = path.join(__dirname, '..', 'evals', 'results');
 
-// Kept as labels only -- run-evals.js doesn't call Claude to translate
-// (it hits the running backend over HTTP), so this must be updated by
-// hand if backend/server.js's MODEL constant changes.
-const TRANSLATION_MODEL = 'claude-haiku-4-5-20251001';
+const fileArgIndex = process.argv.indexOf('--file');
+const EVALS_PATH =
+  fileArgIndex !== -1 && process.argv[fileArgIndex + 1]
+    ? path.resolve(process.argv[fileArgIndex + 1])
+    : path.join(__dirname, '..', 'evals', 'tanglish.json');
+
+// Must match server.js's own resolution exactly, or the label in the
+// results file would misrepresent which model actually produced them.
+const TRANSLATION_MODEL = process.env.TRANSLATION_MODEL || 'claude-haiku-4-5-20251001';
 // Bump this whenever SYSTEM_PROMPT changes meaningfully, so a saved
 // results file records which prompt version produced it.
-const PROMPT_VERSION = 'v4-narrow-english-passthrough';
+const PROMPT_VERSION = 'v5-output-guard-retry';
 // Deliberately a larger model than the one being graded -- a grader
 // shouldn't share the translator's blind spots.
 const JUDGE_MODEL = 'claude-sonnet-5';
+
+// $ per 1M tokens. Source: claude-api skill, cached 2026-06-24, checked
+// against today's date -- Sonnet 5's intro rate ($2/$10) expired
+// 2026-08-31, so the standard rate applies. Update if pricing changes.
+const PRICING_PER_MILLION_TOKENS = {
+  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
+  'claude-haiku-4-5': { input: 1.0, output: 5.0 },
+  'claude-sonnet-5': { input: 3.0, output: 15.0 },
+};
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -59,20 +79,42 @@ function looksLikeQuestion(text) {
   return QUESTION_STARTERS.includes(firstWord);
 }
 
+function median(numbers) {
+  if (numbers.length === 0) return null;
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function estimateCostPer1000(usages) {
+  const pricing = PRICING_PER_MILLION_TOKENS[TRANSLATION_MODEL];
+  if (!pricing || usages.length === 0) return null;
+  const avgInput = usages.reduce((sum, u) => sum + u.inputTokens, 0) / usages.length;
+  const avgOutput = usages.reduce((sum, u) => sum + u.outputTokens, 0) / usages.length;
+  const costPerMessage = (avgInput * pricing.input + avgOutput * pricing.output) / 1_000_000;
+  return costPerMessage * 1000;
+}
+
 async function translate(text) {
+  const startedAt = Date.now();
   const response = await fetch(`${BASE_URL}/translate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   });
+  const latencyMs = Date.now() - startedAt;
   const body = await response.json();
-  return { status: response.status, body };
+  return { status: response.status, body, latencyMs };
 }
 
+// Tightened after the first version of this rubric let some questionable
+// output through: Hindi loanwords (e.g. "kal" for tomorrow, common in
+// North Indian Hindi-Urdu but not Tamil) were passing as if they were
+// valid Tanglish, and "close enough" meaning was being accepted as PASS.
 const JUDGE_RUBRIC = `You are grading a Tamil-transliteration (Tanglish) system. Judge whether OUTPUT meets every one of these criteria, given the ORIGINAL English chat message it was supposed to transliterate:
 
-1. Meaning preserved -- OUTPUT conveys the same meaning as ORIGINAL.
-2. Written in Tanglish (Tamil words transliterated into English/Latin letters), not left in plain English.
+1. Meaning preserved -- OUTPUT conveys the same meaning as ORIGINAL, closely. Minor omissions or additions of meaning are a FAIL, not just wildly wrong meaning.
+2. Written in Tanglish using Tamil vocabulary specifically, not left in plain English. Loanwords from other Indian languages (e.g. Hindi "kal" for tomorrow, "accha" for good/ok) are NOT Tanglish and are a FAIL, even though they might appear in casual Indian-English texting generally -- this system transliterates into Tamil, not a generic Hindi-English mix.
 3. Casual register by default -- respectful register only if ORIGINAL is addressed to someone like amma, appa, sir, madam, aunty, or uncle.
 4. OUTPUT is a rewrite of the sender's message, not a reply or answer to it -- a question in ORIGINAL must still be a question in OUTPUT.
 
@@ -103,21 +145,24 @@ async function judgeCase(input, actual) {
     }
     return { verdict: null, reason: `unparseable judge response: ${responseText}` };
   } catch (err) {
-    // A transient judge failure shouldn't crash a 40-call run -- record
+    // A transient judge failure shouldn't crash a multi-call run -- record
     // it as ungraded (not a FAIL verdict, which would misrepresent the
     // translation itself as having failed) and keep going.
     return { verdict: null, reason: `judge request failed: ${err.message}` };
   }
 }
 
-function renderMarkdown({ timestamp, matchRateStr, judgeRateStr, scored, inPromptEntries }) {
+function renderMarkdown({ timestamp, matchRateStr, judgeRateStr, medianLatencyMs, costPer1000, scored, inPromptEntries, disagreements }) {
   const lines = [];
   lines.push(`# Eval run: ${timestamp}`, '');
+  lines.push(`- Eval file: ${path.relative(process.cwd(), EVALS_PATH)}`);
   lines.push(`- Translation model: ${TRANSLATION_MODEL}`);
   lines.push(`- Judge model: ${JUDGE_MODEL}`);
   lines.push(`- Prompt version: ${PROMPT_VERSION}`);
   lines.push(`- Exact/variant match rate: ${matchRateStr}`);
-  lines.push(`- Judge pass rate: ${judgeRateStr}`, '');
+  lines.push(`- Judge pass rate: ${judgeRateStr}`);
+  lines.push(`- Median latency: ${medianLatencyMs !== null ? `${medianLatencyMs}ms` : 'n/a'}`);
+  lines.push(`- Estimated cost per 1,000 messages: ${costPer1000 !== null ? `$${costPer1000.toFixed(3)}` : 'n/a'}`, '');
 
   lines.push('## Scored cases', '');
   lines.push('| # | Category | Input | Expected | Acceptable | Actual | Match | Judge | Judge reason |');
@@ -127,6 +172,17 @@ function renderMarkdown({ timestamp, matchRateStr, judgeRateStr, scored, inPromp
       `| ${i + 1} | ${r.category} | ${r.input} | ${r.expected} | ${(r.acceptable || []).join('; ')} | ${r.actual} | ${r.matched ? 'MATCH' : 'MISMATCH'} | ${r.judgeVerdict || ''} | ${r.judgeReason || ''} |`
     );
   });
+
+  lines.push('', '## Judge PASS but exact/variant match FAIL (spot-check these)', '');
+  if (disagreements.length === 0) {
+    lines.push('None.');
+  } else {
+    lines.push('| Input | Expected | Acceptable | Actual | Judge reason |');
+    lines.push('|---|---|---|---|---|');
+    disagreements.forEach((r) => {
+      lines.push(`| ${r.input} | ${r.expected} | ${(r.acceptable || []).join('; ')} | ${r.actual} | ${r.judgeReason} |`);
+    });
+  }
 
   lines.push('', '## In-prompt examples (excluded from scoring)', '');
   lines.push('| Input | Expected | Actual |');
@@ -145,8 +201,9 @@ async function main() {
 
   for (const testCase of cases) {
     const { input, expected, category, reviewed, inPrompt, acceptable } = testCase;
-    const { status, body } = await translate(input);
+    const { status, body, latencyMs } = await translate(input);
     const actual = status === 200 ? body.tamil : `[HTTP ${status}] ${body.error}`;
+    const usage = status === 200 && body.usage ? { inputTokens: body.usage.inputTokens, outputTokens: body.usage.outputTokens } : null;
     const looksLikeReply = status === 200 && looksLikeQuestion(input) && !looksLikeQuestion(actual);
 
     const isScored = Boolean(reviewed) && !inPrompt;
@@ -165,7 +222,7 @@ async function main() {
     }
 
     results.push({
-      input, category, expected, acceptable: acceptable || [], actual, status,
+      input, category, expected, acceptable: acceptable || [], actual, status, latencyMs, usage,
       inPrompt: Boolean(inPrompt), scored: isScored, matched, judgeVerdict, judgeReason, looksLikeReply,
     });
   }
@@ -176,6 +233,10 @@ async function main() {
   const matchCount = scored.filter((r) => r.matched).length;
   const judgedResults = scored.filter((r) => r.judgeVerdict !== null);
   const judgePassCount = judgedResults.filter((r) => r.judgeVerdict === 'PASS').length;
+  const disagreements = scored.filter((r) => r.judgeVerdict === 'PASS' && r.matched === false);
+
+  const medianLatencyMs = median(results.map((r) => r.latencyMs).filter((v) => v !== null));
+  const costPer1000 = estimateCostPer1000(results.map((r) => r.usage).filter((u) => u !== null));
 
   const matchRateStr = `${matchCount}/${scored.length}`;
   const judgeRateStr = `${judgePassCount}/${judgedResults.length}`;
@@ -190,11 +251,14 @@ async function main() {
     JSON.stringify(
       {
         timestamp,
+        evalFile: path.relative(process.cwd(), EVALS_PATH),
         translationModel: TRANSLATION_MODEL,
         judgeModel: JUDGE_MODEL,
         promptVersion: PROMPT_VERSION,
         matchRate: { matched: matchCount, total: scored.length },
         judgePassRate: { passed: judgePassCount, total: judgedResults.length },
+        medianLatencyMs,
+        estimatedCostPer1000Messages: costPer1000,
         cases: results,
       },
       null,
@@ -202,10 +266,15 @@ async function main() {
     )
   );
 
-  fs.writeFileSync(mdPath, renderMarkdown({ timestamp, matchRateStr, judgeRateStr, scored, inPromptEntries }));
+  fs.writeFileSync(
+    mdPath,
+    renderMarkdown({ timestamp, matchRateStr, judgeRateStr, medianLatencyMs, costPer1000, scored, inPromptEntries, disagreements })
+  );
 
   console.log(`Exact/variant match rate: ${matchRateStr}`);
   console.log(`Judge pass rate: ${judgeRateStr}`);
+  console.log(`Median latency: ${medianLatencyMs !== null ? `${medianLatencyMs}ms` : 'n/a'}`);
+  console.log(`Estimated cost per 1,000 messages: ${costPer1000 !== null ? `$${costPer1000.toFixed(3)}` : 'n/a'}`);
   console.log(`Full results: ${path.relative(process.cwd(), mdPath)}`);
 }
 
