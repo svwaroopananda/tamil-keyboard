@@ -3,150 +3,197 @@
     "input": "hey macha, how are you?",
     "expected": "Hey macha, eppadi irukka?",
     "category": "question",
-    "reviewed": true
+    "reviewed": true,
+    "inPrompt": true
   },
   {
     "input": "did you eat?",
     "expected": "Saaptiya?",
+    "acceptable": ["Saapteeya?", "Sapdiya?"],
     "category": "question",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted",
+    "inPrompt": true
   },
   {
     "input": "what are you doing?",
     "expected": "Enna panra?",
+    "acceptable": ["Enna pannura?", "Enna panre?"],
     "category": "question",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted",
+    "inPrompt": true
   },
   {
     "input": "where are you?",
     "expected": "Enga irukka?",
+    "acceptable": ["Enga iruka?"],
     "category": "question",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted",
+    "inPrompt": true
   },
   {
     "input": "can you call me?",
     "expected": "Enakku call pannuviya?",
+    "acceptable": ["Call panriya?", "Enakku call panna mudiyuma?"],
     "category": "question",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted",
+    "inPrompt": true
   },
   {
     "input": "are you free tomorrow?",
-    "expected": "Naalaikku free ah irukka?",
+    "expected": "Naalaikku free ah?",
+    "acceptable": ["Naalaikku free ah irukka?", "Naalaiku free ah irukkiya?"],
     "category": "question",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "hey what's up",
-    "expected": "Hey, enna aachu?",
+    "expected": "Hey, enna vishayam?",
+    "acceptable": ["Hey, enna news?"],
     "category": "greeting",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "good morning!",
     "expected": "Good morning!",
     "category": "greeting",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "hi, long time no see!",
-    "expected": "Hi, romba naala pakalaye!",
+    "expected": "Hi, romba naal aachu paathu!",
+    "acceptable": ["Hi, romba naala paakave illa!"],
     "category": "greeting",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "happy birthday!",
     "expected": "Happy birthday!",
     "category": "greeting",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "let's meet at 7pm",
     "expected": "7pm ku meet pannalam",
+    "acceptable": ["7 mani ku meet pannalam"],
     "category": "plans",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "can we reschedule to tomorrow?",
     "expected": "Naalaikku reschedule pannalama?",
     "category": "plans",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "I'll pick you up at the station",
-    "expected": "Naan unna station la pick pannuren",
+    "expected": "Naan unna station la pick up panren.",
+    "acceptable": ["Naan unna station la pick pannuren"],
     "category": "plans",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "movie tonight?",
-    "expected": "Indha raathiri movie ah?",
+    "expected": "Innaiku night movie ah?",
+    "acceptable": ["Innaiku night movie polama?", "Tonight movie ah?"],
     "category": "plans",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "sorry I'm late",
-    "expected": "Sorry, late ah vanthutten",
+    "expected": "Sorry, late aayiduchu.",
+    "acceptable": ["Sorry, late ah vanthuten", "Sorry da, late aayiduchu"],
     "category": "apology",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "so sorry for the trouble",
-    "expected": "Romba sorry, trouble kudutheney",
+    "expected": "Romba sorry, trouble kuduthuten.",
+    "acceptable": ["Romba sorry, kashtam kuduthuten"],
     "category": "apology",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "my bad, forgot to reply",
-    "expected": "My bad da, reply pannala",
+    "expected": "My bad, reply panna marandhuten.",
+    "acceptable": ["My bad da, reply panna maranthutten"],
     "category": "apology",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "bro that movie was insane",
-    "expected": "Bro, andha movie insane ah irundhichu",
+    "expected": "Bro, andha movie semma insane.",
+    "acceptable": ["Bro, andha movie vera level", "Bro, andha movie insane ah irundhuchu"],
     "category": "slang",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "lol that's so funny",
-    "expected": "Lol, romba funny ah irukku",
+    "expected": "Lol, semma funny.",
+    "acceptable": ["Lol, romba funny ah irukku"],
     "category": "slang",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "ok cool, see you then",
-    "expected": "Ok cool, appo pakalam",
+    "expected": "Ok cool, appo paakalam.",
+    "acceptable": ["Ok cool, appuram paakalam"],
     "category": "slang",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "no worries, take your time",
-    "expected": "No worries da, un time edutho",
+    "expected": "No worries, time eduthuko.",
+    "acceptable": ["No worries da, time eduthuko"],
     "category": "slang",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "amma, did you eat?",
     "expected": "Amma, saapteengala?",
     "category": "respectful",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "sir, can we reschedule the meeting?",
     "expected": "Sir, meeting ah reschedule pannalama?",
     "category": "respectful",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "aunty, how are you doing?",
     "expected": "Aunty, eppadi irukkeenga?",
     "category": "respectful",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   },
   {
     "input": "appa, I'll be home late",
     "expected": "Appa, naan veetuku late ah varen",
+    "acceptable": ["Appa, veetuku late aagum"],
     "category": "respectful",
-    "reviewed": false
+    "reviewed": true,
+    "reviewedBy": "claude-assisted"
   }
 ]

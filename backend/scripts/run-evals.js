@@ -10,6 +10,17 @@
 // Only entries marked "reviewed": true count toward the match score --
 // the rest have draft expected values that haven't been corrected by a
 // Tamil speaker yet, so scoring against them would be meaningless.
+//
+// Entries marked "inPrompt": true are also excluded from scoring, even if
+// reviewed: they appear as few-shot examples in SYSTEM_PROMPT itself, so
+// the model has effectively seen the answer already -- scoring them would
+// be measuring memorization, not generalization. Still printed, labeled,
+// so they're visible.
+//
+// A case matches if the actual output equals "expected" OR any string in
+// its optional "acceptable" array, after normalizing case/punctuation --
+// Tanglish spelling varies (enga/yenga, poren/poraen) and exact string
+// match is too strict for that.
 
 const fs = require('fs');
 const path = require('path');
@@ -56,25 +67,38 @@ async function main() {
   let replyFlagCount = 0;
 
   for (const testCase of cases) {
-    const { input, expected, category, reviewed } = testCase;
+    const { input, expected, category, reviewed, inPrompt, acceptable } = testCase;
     const { status, body } = await translate(input);
     const actual = status === 200 ? body.tamil : `[HTTP ${status}] ${body.error}`;
 
     const looksLikeReply = status === 200 && looksLikeQuestion(input) && !looksLikeQuestion(actual);
     if (looksLikeReply) replyFlagCount++;
 
+    const isScored = reviewed && !inPrompt;
     let matched = null;
-    if (reviewed) {
+    if (isScored) {
       reviewedCount++;
-      matched = status === 200 && normalize(actual) === normalize(expected);
+      const candidates = [expected, ...(acceptable || [])];
+      matched = status === 200 && candidates.some((candidate) => normalize(actual) === normalize(candidate));
       if (matched) matchCount++;
     }
 
-    const label = reviewed ? (matched ? 'MATCH' : 'MISMATCH') : 'unreviewed';
+    let label;
+    if (inPrompt) {
+      label = reviewed ? 'in-prompt example (not scored)' : 'in-prompt example, unreviewed (not scored)';
+    } else if (reviewed) {
+      label = matched ? 'MATCH' : 'MISMATCH';
+    } else {
+      label = 'unreviewed';
+    }
+
     console.log(`[${category}] ${label}`);
-    console.log(`  input:    ${input}`);
-    console.log(`  expected: ${expected}`);
-    console.log(`  actual:   ${actual}`);
+    console.log(`  input:      ${input}`);
+    console.log(`  expected:   ${expected}`);
+    if (acceptable && acceptable.length > 0) {
+      console.log(`  acceptable: ${acceptable.join(' | ')}`);
+    }
+    console.log(`  actual:     ${actual}`);
     if (looksLikeReply) {
       console.log('  ⚠ looks like a REPLY, not a translation -- input is a question but output isn\'t');
     }
