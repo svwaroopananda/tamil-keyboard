@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:prompt": "node scripts/test-translate.js"
+    "test:prompt": "node scripts/test-translate.js",
+    "eval": "node scripts/run-evals.js"
   },
   "keywords": [],
   "author": "",

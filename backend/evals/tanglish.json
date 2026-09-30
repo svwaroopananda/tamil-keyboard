@@ -1,0 +1,152 @@
+[
+  {
+    "input": "hey macha, how are you?",
+    "expected": "Hey macha, eppadi irukka?",
+    "category": "question",
+    "reviewed": true
+  },
+  {
+    "input": "did you eat?",
+    "expected": "Saaptiya?",
+    "category": "question",
+    "reviewed": false
+  },
+  {
+    "input": "what are you doing?",
+    "expected": "Enna panra?",
+    "category": "question",
+    "reviewed": false
+  },
+  {
+    "input": "where are you?",
+    "expected": "Enga irukka?",
+    "category": "question",
+    "reviewed": false
+  },
+  {
+    "input": "can you call me?",
+    "expected": "Enakku call pannuviya?",
+    "category": "question",
+    "reviewed": false
+  },
+  {
+    "input": "are you free tomorrow?",
+    "expected": "Naalaikku free ah irukka?",
+    "category": "question",
+    "reviewed": false
+  },
+  {
+    "input": "hey what's up",
+    "expected": "Hey, enna aachu?",
+    "category": "greeting",
+    "reviewed": false
+  },
+  {
+    "input": "good morning!",
+    "expected": "Good morning!",
+    "category": "greeting",
+    "reviewed": false
+  },
+  {
+    "input": "hi, long time no see!",
+    "expected": "Hi, romba naala pakalaye!",
+    "category": "greeting",
+    "reviewed": false
+  },
+  {
+    "input": "happy birthday!",
+    "expected": "Happy birthday!",
+    "category": "greeting",
+    "reviewed": false
+  },
+  {
+    "input": "let's meet at 7pm",
+    "expected": "7pm ku meet pannalam",
+    "category": "plans",
+    "reviewed": false
+  },
+  {
+    "input": "can we reschedule to tomorrow?",
+    "expected": "Naalaikku reschedule pannalama?",
+    "category": "plans",
+    "reviewed": false
+  },
+  {
+    "input": "I'll pick you up at the station",
+    "expected": "Naan unna station la pick pannuren",
+    "category": "plans",
+    "reviewed": false
+  },
+  {
+    "input": "movie tonight?",
+    "expected": "Indha raathiri movie ah?",
+    "category": "plans",
+    "reviewed": false
+  },
+  {
+    "input": "sorry I'm late",
+    "expected": "Sorry, late ah vanthutten",
+    "category": "apology",
+    "reviewed": false
+  },
+  {
+    "input": "so sorry for the trouble",
+    "expected": "Romba sorry, trouble kudutheney",
+    "category": "apology",
+    "reviewed": false
+  },
+  {
+    "input": "my bad, forgot to reply",
+    "expected": "My bad da, reply pannala",
+    "category": "apology",
+    "reviewed": false
+  },
+  {
+    "input": "bro that movie was insane",
+    "expected": "Bro, andha movie insane ah irundhichu",
+    "category": "slang",
+    "reviewed": false
+  },
+  {
+    "input": "lol that's so funny",
+    "expected": "Lol, romba funny ah irukku",
+    "category": "slang",
+    "reviewed": false
+  },
+  {
+    "input": "ok cool, see you then",
+    "expected": "Ok cool, appo pakalam",
+    "category": "slang",
+    "reviewed": false
+  },
+  {
+    "input": "no worries, take your time",
+    "expected": "No worries da, un time edutho",
+    "category": "slang",
+    "reviewed": false
+  },
+  {
+    "input": "amma, did you eat?",
+    "expected": "Amma, saapteengala?",
+    "category": "respectful",
+    "reviewed": false
+  },
+  {
+    "input": "sir, can we reschedule the meeting?",
+    "expected": "Sir, meeting ah reschedule pannalama?",
+    "category": "respectful",
+    "reviewed": false
+  },
+  {
+    "input": "aunty, how are you doing?",
+    "expected": "Aunty, eppadi irukkeenga?",
+    "category": "respectful",
+    "reviewed": false
+  },
+  {
+    "input": "appa, I'll be home late",
+    "expected": "Appa, naan veetuku late ah varen",
+    "category": "respectful",
+    "reviewed": false
+  }
+]
