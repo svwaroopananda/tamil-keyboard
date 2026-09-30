@@ -1,0 +1,73 @@
+name: TamilKeyboard
+options:
+  bundleIdPrefix: com.svwaroopananda.tamilkeyboard
+  deploymentTarget:
+    iOS: "17.0"
+
+targets:
+  # The host app. This is what appears on the home screen and in App
+  # Store search. Its job right now is just onboarding: tell the user
+  # how to enable the keyboard and grant Full Access in Settings.
+  TamilKeyboardApp:
+    type: application
+    platform: iOS
+    sources:
+      - TamilKeyboardApp
+    info:
+      path: TamilKeyboardApp/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.svwaroopananda.tamilkeyboard
+    # This is the actual "glue" step: it tells Xcode to build
+    # KeyboardExtension and copy its .appex bundle into
+    # TamilKeyboardApp.app/PlugIns/ at build time, so the two targets
+    # ship as one downloadable unit.
+    dependencies:
+      - target: KeyboardExtension
+        embed: true
+
+  # The keyboard extension itself. A separate binary that iOS loads
+  # into whatever app the user is typing in (Messages, WhatsApp, etc.)
+  # once they've selected this keyboard in Settings.
+  KeyboardExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - KeyboardExtension
+    info:
+      path: KeyboardExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Tamil Keyboard
+        # ATS blocks plain HTTP by default. NSAllowsLocalNetworking scopes
+        # the exception to localhost/local IPs only -- not a blanket
+        # "allow any HTTP" exception -- so it's safe to leave in for local
+        # dev without opening the door to arbitrary cleartext hosts.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # This dictionary is how iOS knows this .appex is a keyboard
+        # (not, say, a share extension or a widget), and which class
+        # to instantiate when it loads the extension.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+            # This is what makes the "Allow Full Access" toggle exist
+            # for our keyboard in Settings at all. Without it, the
+            # extension is hard-blocked from network access -- our
+            # /translate call would simply fail.
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.svwaroopananda.tamilkeyboard.keyboard
+        SKIP_INSTALL: NO

@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Xcode project is generated from ios/project.yml via `xcodegen generate` --
+# the generated .xcodeproj is reproducible from that file, so it isn't
+# committed (also avoids .pbxproj merge-conflict pain).
+ios/TamilKeyboard.xcodeproj/
+
+# Node (also covered by backend/.gitignore, kept here as a backstop)
+node_modules/
