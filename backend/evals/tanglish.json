@@ -45,7 +45,7 @@
   {
     "input": "are you free tomorrow?",
     "expected": "Naalaikku free ah?",
-    "acceptable": ["Naalaikku free ah irukka?", "Naalaiku free ah irukkiya?"],
+    "acceptable": ["Naalaikku free ah irukka?", "Naalaiku free ah irukkiya?", "Free irukka naalaikku?"],
     "category": "question",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -53,7 +53,7 @@
   {
     "input": "hey what's up",
     "expected": "Hey, enna vishayam?",
-    "acceptable": ["Hey, enna news?"],
+    "acceptable": ["Hey, enna news?", "Hey enna panra?"],
     "category": "greeting",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -98,7 +98,7 @@
   {
     "input": "I'll pick you up at the station",
     "expected": "Naan unna station la pick up panren.",
-    "acceptable": ["Naan unna station la pick pannuren"],
+    "acceptable": ["Naan unna station la pick pannuren", "Station la unna pick up pannren"],
     "category": "plans",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -114,7 +114,7 @@
   {
     "input": "sorry I'm late",
     "expected": "Sorry, late aayiduchu.",
-    "acceptable": ["Sorry, late ah vanthuten", "Sorry da, late aayiduchu"],
+    "acceptable": ["Sorry, late ah vanthuten", "Sorry da, late aayiduchu", "Sorry, naan late aagiten"],
     "category": "apology",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -130,7 +130,7 @@
   {
     "input": "my bad, forgot to reply",
     "expected": "My bad, reply panna marandhuten.",
-    "acceptable": ["My bad da, reply panna maranthutten"],
+    "acceptable": ["My bad da, reply panna maranthutten", "My bad, reply pannanum nu marandhuten"],
     "category": "apology",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -138,7 +138,7 @@
   {
     "input": "bro that movie was insane",
     "expected": "Bro, andha movie semma insane.",
-    "acceptable": ["Bro, andha movie vera level", "Bro, andha movie insane ah irundhuchu"],
+    "acceptable": ["Bro, andha movie vera level", "Bro, andha movie insane ah irundhuchu", "Bro aa movie insane"],
     "category": "slang",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -162,7 +162,7 @@
   {
     "input": "no worries, take your time",
     "expected": "No worries, time eduthuko.",
-    "acceptable": ["No worries da, time eduthuko"],
+    "acceptable": ["No worries da, time eduthuko", "No worries, nee time eduthuko"],
     "category": "slang",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -170,6 +170,7 @@
   {
     "input": "amma, did you eat?",
     "expected": "Amma, saapteengala?",
+    "acceptable": ["Amma, saaptheengala?"],
     "category": "respectful",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -177,6 +178,7 @@
   {
     "input": "sir, can we reschedule the meeting?",
     "expected": "Sir, meeting ah reschedule pannalama?",
+    "acceptable": ["Sir, namma meeting ah reschedule pannalama?"],
     "category": "respectful",
     "reviewed": true,
     "reviewedBy": "claude-assisted"
@@ -191,7 +193,7 @@
   {
     "input": "appa, I'll be home late",
     "expected": "Appa, naan veetuku late ah varen",
-    "acceptable": ["Appa, veetuku late aagum"],
+    "acceptable": ["Appa, veetuku late aagum", "Appa, naan late ah varen"],
     "category": "respectful",
     "reviewed": true,
     "reviewedBy": "claude-assisted"

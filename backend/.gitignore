@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+# Generated eval run output -- reproducible from evals/tanglish.json +
+# the current prompt, not something to track like source. Each run
+# writes a timestamped .md/.json pair here.
+evals/results/
