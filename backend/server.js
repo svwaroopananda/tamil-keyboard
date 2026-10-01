@@ -36,13 +36,14 @@ if (!apiKey) {
 }
 const anthropic = new Anthropic({ apiKey });
 
-// The model to call. Haiku is the fastest/cheapest Claude model, which
-// matters here: this endpoint sits in the path of someone typing on a
-// keyboard, so latency directly affects how usable the extension feels.
-// Configurable via TRANSLATION_MODEL so eval tooling can compare models
-// against the same running server without editing code -- see
+// The model to call. Sonnet 5 is the default as of docs/decisions/0010 --
+// a judge-scored eval comparison against Haiku 4.5 showed a substantial
+// quality improvement (17/20 vs 10/18 on the eval set) that was judged
+// to outweigh the latency/cost difference for this feature. Configurable
+// via TRANSLATION_MODEL so eval tooling can compare models against the
+// same running server without editing code -- see
 // backend/scripts/run-evals.js and docs/decisions/0009.
-const MODEL = process.env.TRANSLATION_MODEL || 'claude-haiku-4-5-20251001';
+const MODEL = process.env.TRANSLATION_MODEL || 'claude-sonnet-5';
 
 // This system prompt is the actual "product logic" of the app. It's
 // worth being deliberate about it: we want natural Tanglish (Tamil
@@ -166,6 +167,7 @@ app.post('/translate', async (req, res) => {
     let conversation = [{ role: 'user', content: `<user_message>${text}</user_message>` }];
     let message = await callModel(conversation);
     let tamil = extractText(message);
+    let retried = false;
 
     // A prompt can only push the model so far (see docs/decisions/0007) --
     // an eval run found ordinary sentences still coming back completely
@@ -176,6 +178,7 @@ app.post('/translate', async (req, res) => {
     // the model its own output and ask it to try again. See
     // docs/decisions/0008 on why this lives in code, not just the prompt.
     if (isUnchanged(text, tamil) && !isLikelyUntranslatable(text)) {
+      retried = true;
       conversation = [
         ...conversation,
         { role: 'assistant', content: tamil },
@@ -197,8 +200,10 @@ app.post('/translate', async (req, res) => {
       tamil,
       // Additive, backward-compatible: existing clients that only read
       // "tamil" are unaffected. Used by backend/scripts/run-evals.js to
-      // estimate cost per model.
+      // estimate cost per model and to count how often the output guard
+      // (docs/decisions/0008) actually had to kick in.
       usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
+      retried,
     });
   } catch (err) {
     // Log the full error server-side for debugging, but don't leak

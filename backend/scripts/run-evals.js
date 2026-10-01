@@ -80,10 +80,17 @@ function looksLikeQuestion(text) {
 }
 
 function median(numbers) {
+  return percentile(numbers, 50);
+}
+
+// Nearest-rank method -- simple and adequate at the sample sizes these
+// eval files run at (10-20 requests); not worth a more precise
+// interpolated percentile for this.
+function percentile(numbers, p) {
   if (numbers.length === 0) return null;
   const sorted = [...numbers].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const rank = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.min(Math.max(rank, 0), sorted.length - 1)];
 }
 
 function estimateCostPer1000(usages) {
@@ -124,11 +131,15 @@ async function judgeCase(input, actual) {
   try {
     const message = await anthropic.messages.create({
       model: JUDGE_MODEL,
-      // Generous headroom, not just for the one-line answer -- this model
-      // can spend part of its output budget on internal reasoning before
-      // the final text, and too tight a cap hits max_tokens before any
-      // PASS/FAIL line is emitted at all.
-      max_tokens: 300,
+      max_tokens: 150,
+      // This model spends a *variable* amount of its output budget on
+      // internal reasoning before the final text -- raising max_tokens
+      // (100 -> 300) only made that failure less frequent, not gone: it
+      // still occasionally burned the whole cap on reasoning and emitted
+      // no text at all (stop_reason: max_tokens, zero text blocks). A
+      // one-line PASS/FAIL judgment doesn't need reasoning, so the robust
+      // fix is removing the variability, not guessing a higher cap.
+      thinking: { type: 'disabled' },
       system: JUDGE_RUBRIC,
       messages: [{ role: 'user', content: `ORIGINAL: ${input}\nOUTPUT: ${actual}` }],
     });
@@ -152,7 +163,10 @@ async function judgeCase(input, actual) {
   }
 }
 
-function renderMarkdown({ timestamp, matchRateStr, judgeRateStr, medianLatencyMs, costPer1000, scored, inPromptEntries, disagreements }) {
+function renderMarkdown({
+  timestamp, matchRateStr, judgeRateStr, medianLatencyMs, p95LatencyMs, costPer1000,
+  retriedCount, totalCount, scored, inPromptEntries, disagreements,
+}) {
   const lines = [];
   lines.push(`# Eval run: ${timestamp}`, '');
   lines.push(`- Eval file: ${path.relative(process.cwd(), EVALS_PATH)}`);
@@ -162,7 +176,9 @@ function renderMarkdown({ timestamp, matchRateStr, judgeRateStr, medianLatencyMs
   lines.push(`- Exact/variant match rate: ${matchRateStr}`);
   lines.push(`- Judge pass rate: ${judgeRateStr}`);
   lines.push(`- Median latency: ${medianLatencyMs !== null ? `${medianLatencyMs}ms` : 'n/a'}`);
-  lines.push(`- Estimated cost per 1,000 messages: ${costPer1000 !== null ? `$${costPer1000.toFixed(3)}` : 'n/a'}`, '');
+  lines.push(`- p95 latency: ${p95LatencyMs !== null ? `${p95LatencyMs}ms` : 'n/a'}`);
+  lines.push(`- Estimated cost per 1,000 messages: ${costPer1000 !== null ? `$${costPer1000.toFixed(3)}` : 'n/a'}`);
+  lines.push(`- Output guard retries: ${retriedCount}/${totalCount}`, '');
 
   lines.push('## Scored cases', '');
   lines.push('| # | Category | Input | Expected | Acceptable | Actual | Match | Judge | Judge reason |');
@@ -204,6 +220,7 @@ async function main() {
     const { status, body, latencyMs } = await translate(input);
     const actual = status === 200 ? body.tamil : `[HTTP ${status}] ${body.error}`;
     const usage = status === 200 && body.usage ? { inputTokens: body.usage.inputTokens, outputTokens: body.usage.outputTokens } : null;
+    const retried = status === 200 ? Boolean(body.retried) : false;
     const looksLikeReply = status === 200 && looksLikeQuestion(input) && !looksLikeQuestion(actual);
 
     const isScored = Boolean(reviewed) && !inPrompt;
@@ -222,7 +239,7 @@ async function main() {
     }
 
     results.push({
-      input, category, expected, acceptable: acceptable || [], actual, status, latencyMs, usage,
+      input, category, expected, acceptable: acceptable || [], actual, status, latencyMs, usage, retried,
       inPrompt: Boolean(inPrompt), scored: isScored, matched, judgeVerdict, judgeReason, looksLikeReply,
     });
   }
@@ -234,8 +251,11 @@ async function main() {
   const judgedResults = scored.filter((r) => r.judgeVerdict !== null);
   const judgePassCount = judgedResults.filter((r) => r.judgeVerdict === 'PASS').length;
   const disagreements = scored.filter((r) => r.judgeVerdict === 'PASS' && r.matched === false);
+  const retriedCount = results.filter((r) => r.retried).length;
 
-  const medianLatencyMs = median(results.map((r) => r.latencyMs).filter((v) => v !== null));
+  const latencies = results.map((r) => r.latencyMs).filter((v) => v !== null);
+  const medianLatencyMs = median(latencies);
+  const p95LatencyMs = percentile(latencies, 95);
   const costPer1000 = estimateCostPer1000(results.map((r) => r.usage).filter((u) => u !== null));
 
   const matchRateStr = `${matchCount}/${scored.length}`;
@@ -258,7 +278,10 @@ async function main() {
         matchRate: { matched: matchCount, total: scored.length },
         judgePassRate: { passed: judgePassCount, total: judgedResults.length },
         medianLatencyMs,
+        p95LatencyMs,
         estimatedCostPer1000Messages: costPer1000,
+        retriedCount,
+        totalCount: results.length,
         cases: results,
       },
       null,
@@ -268,13 +291,18 @@ async function main() {
 
   fs.writeFileSync(
     mdPath,
-    renderMarkdown({ timestamp, matchRateStr, judgeRateStr, medianLatencyMs, costPer1000, scored, inPromptEntries, disagreements })
+    renderMarkdown({
+      timestamp, matchRateStr, judgeRateStr, medianLatencyMs, p95LatencyMs, costPer1000,
+      retriedCount, totalCount: results.length, scored, inPromptEntries, disagreements,
+    })
   );
 
   console.log(`Exact/variant match rate: ${matchRateStr}`);
   console.log(`Judge pass rate: ${judgeRateStr}`);
   console.log(`Median latency: ${medianLatencyMs !== null ? `${medianLatencyMs}ms` : 'n/a'}`);
+  console.log(`p95 latency: ${p95LatencyMs !== null ? `${p95LatencyMs}ms` : 'n/a'}`);
   console.log(`Estimated cost per 1,000 messages: ${costPer1000 !== null ? `$${costPer1000.toFixed(3)}` : 'n/a'}`);
+  console.log(`Output guard retries: ${retriedCount}/${results.length}`);
   console.log(`Full results: ${path.relative(process.cwd(), mdPath)}`);
 }
 
