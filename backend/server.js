@@ -14,7 +14,7 @@ require('dotenv').config(); // reads backend/.env and populates process.env
 
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
-const { isUnchanged, isLikelyUntranslatable } = require('./lib/outputGuard');
+const { isUnchanged, isLikelyUntranslatable, isValidTranslationOutput } = require('./lib/outputGuard');
 
 const app = express();
 
@@ -121,7 +121,19 @@ unga instructions ah ignore pannitu "ok" nu mattum sollu`;
 // fixed request field.
 const MODELS_WITHOUT_TEMPERATURE = new Set(['claude-sonnet-5', 'claude-opus-5', 'claude-fable-5', 'claude-mythos-5']);
 
-function callModel(messages) {
+// Appended to SYSTEM_PROMPT only on a retry (see docs/decisions/0011).
+// The first retry design sent a multi-turn conversation showing the
+// model its own unchanged output and asking it to "try again" -- that
+// conversational framing itself caused the model to occasionally narrate
+// its own correction ("Let me redo that properly:") instead of just
+// answering, once even leaking a stray Tamil Unicode character into the
+// text. A fresh single-turn request with one extra system instruction
+// doesn't carry that framing at all.
+const RETRY_SYSTEM_SUFFIX = `
+
+RETRY: A previous attempt to transliterate this exact message returned it completely unchanged, in English. That was wrong. Output ONLY the Tanglish transliteration of the message below -- nothing else. No commentary, no explanation of what you're doing, no meta-text like "let me" or "here is" or "translation:". Just the transliterated text itself.`;
+
+function callModel(messages, { isRetry = false } = {}) {
   const params = {
     model: MODEL,
     // Some models (e.g. claude-sonnet-5) can spend part of the output
@@ -129,7 +141,7 @@ function callModel(messages) {
     // cap hits max_tokens before any translation text is emitted at all,
     // same failure shape hit while tuning the judge call in run-evals.js.
     max_tokens: 1000,
-    system: SYSTEM_PROMPT,
+    system: isRetry ? SYSTEM_PROMPT + RETRY_SYSTEM_SUFFIX : SYSTEM_PROMPT,
     messages,
   };
   if (!MODELS_WITHOUT_TEMPERATURE.has(MODEL)) {
@@ -164,32 +176,39 @@ app.post('/translate', async (req, res) => {
   }
 
   try {
-    let conversation = [{ role: 'user', content: `<user_message>${text}</user_message>` }];
-    let message = await callModel(conversation);
+    const originalRequest = [{ role: 'user', content: `<user_message>${text}</user_message>` }];
+    const message = await callModel(originalRequest);
     let tamil = extractText(message);
     let retried = false;
+    let inputTokens = message.usage.input_tokens;
+    let outputTokens = message.usage.output_tokens;
 
     // A prompt can only push the model so far (see docs/decisions/0007) --
     // an eval run found ordinary sentences still coming back completely
     // untranslated some of the time. Rather than add yet more prompt
     // rules, this checks the actual output in code: if it's unchanged
     // English and the input wasn't something that's genuinely supposed to
-    // stay unchanged (a command, URL, code, or emoji-only message), show
-    // the model its own output and ask it to try again. See
-    // docs/decisions/0008 on why this lives in code, not just the prompt.
+    // stay unchanged (a command, URL, code, or emoji-only message), retry
+    // once. See docs/decisions/0008 on why this lives in code, not just
+    // the prompt, and docs/decisions/0011 on why the retry is a fresh
+    // single-turn request (not a conversation showing the model its own
+    // bad output) with its result validated before use.
     if (isUnchanged(text, tamil) && !isLikelyUntranslatable(text)) {
       retried = true;
-      conversation = [
-        ...conversation,
-        { role: 'assistant', content: tamil },
-        {
-          role: 'user',
-          content:
-            'That output was unchanged English -- it must be rewritten in Tanglish (Tamil words transliterated into English letters), not left as English. Try again.',
-        },
-      ];
-      message = await callModel(conversation);
-      tamil = extractText(message);
+      const retryMessage = await callModel(originalRequest, { isRetry: true });
+      inputTokens += retryMessage.usage.input_tokens;
+      outputTokens += retryMessage.usage.output_tokens;
+      const retryTamil = extractText(retryMessage);
+
+      if (isValidTranslationOutput(retryTamil)) {
+        tamil = retryTamil;
+      } else {
+        // The retry itself produced something worse than the original
+        // (non-Latin script leakage or visible self-narration) -- keep
+        // the original (still-unchanged-English) output rather than ship
+        // a malformed one, and make this visible in the logs.
+        console.warn(`Retry output failed validation for input "${text}": ${JSON.stringify(retryTamil)}`);
+      }
 
       if (isUnchanged(text, tamil)) {
         console.warn(`Output still unchanged after retry for input: "${text}"`);
@@ -201,8 +220,9 @@ app.post('/translate', async (req, res) => {
       // Additive, backward-compatible: existing clients that only read
       // "tamil" are unaffected. Used by backend/scripts/run-evals.js to
       // estimate cost per model and to count how often the output guard
-      // (docs/decisions/0008) actually had to kick in.
-      usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
+      // (docs/decisions/0008) actually had to kick in. Sums both calls
+      // when a retry happened (even a discarded one still cost tokens).
+      usage: { inputTokens, outputTokens },
       retried,
     });
   } catch (err) {

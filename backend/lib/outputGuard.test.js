@@ -7,6 +7,9 @@ const {
   looksLikeCode,
   looksEmojiOnly,
   isLikelyUntranslatable,
+  containsNonLatinScript,
+  containsMetaCommentary,
+  isValidTranslationOutput,
 } = require('./outputGuard');
 
 test('isUnchanged: identical text matches', () => {
@@ -77,4 +80,45 @@ test('isLikelyUntranslatable: ordinary casual sentences are not flagged', () => 
   assert.equal(isLikelyUntranslatable('movie tonight?'), false);
   assert.equal(isLikelyUntranslatable('lol that\'s so funny'), false);
   assert.equal(isLikelyUntranslatable('good morning!'), false);
+});
+
+// MARK: - Retry output validation
+
+test('containsNonLatinScript: catches the actual observed bug (a stray Tamil character)', () => {
+  assert.equal(containsNonLatinScript('Rொmba cute'), true);
+});
+
+test('containsNonLatinScript: does not flag plain Latin-script Tanglish', () => {
+  assert.equal(containsNonLatinScript('Romba cute ah irukku'), false);
+});
+
+test('containsNonLatinScript: does not flag ordinary punctuation and digits', () => {
+  assert.equal(containsNonLatinScript('7pm ku meet pannalam? "ok"!'), false);
+});
+
+test('containsNonLatinScript: does not flag emoji', () => {
+  assert.equal(containsNonLatinScript('lol semma funny 😂'), false);
+});
+
+test('containsMetaCommentary: catches the actual observed bug ("let me" + "redo")', () => {
+  assert.equal(containsMetaCommentary('Let me redo that properly:\n\nRomba cute'), true);
+});
+
+test('containsMetaCommentary: catches other given examples', () => {
+  assert.equal(containsMetaCommentary("Here's the translation: Saaptiya?"), true);
+  assert.equal(containsMetaCommentary('Translation: Saaptiya?'), true);
+});
+
+test('containsMetaCommentary: does not flag ordinary Tanglish output', () => {
+  assert.equal(containsMetaCommentary('Enga irukka?'), false);
+  assert.equal(containsMetaCommentary('Naan unna station la pick pannuren'), false);
+});
+
+test('isValidTranslationOutput: rejects either failure mode', () => {
+  assert.equal(isValidTranslationOutput('Rொmba cute'), false);
+  assert.equal(isValidTranslationOutput('Let me redo that properly:\n\nRomba cute'), false);
+});
+
+test('isValidTranslationOutput: accepts ordinary Tanglish output', () => {
+  assert.equal(isValidTranslationOutput('Hey macha, eppadi irukka?'), true);
 });

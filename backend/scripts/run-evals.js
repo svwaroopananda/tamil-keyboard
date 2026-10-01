@@ -43,7 +43,7 @@ const EVALS_PATH =
 const TRANSLATION_MODEL = process.env.TRANSLATION_MODEL || 'claude-haiku-4-5-20251001';
 // Bump this whenever SYSTEM_PROMPT changes meaningfully, so a saved
 // results file records which prompt version produced it.
-const PROMPT_VERSION = 'v5-output-guard-retry';
+const PROMPT_VERSION = 'v6-fixed-retry-and-judge-rubric';
 // Deliberately a larger model than the one being graded -- a grader
 // shouldn't share the translator's blind spots.
 const JUDGE_MODEL = 'claude-sonnet-5';
@@ -114,14 +114,19 @@ async function translate(text) {
   return { status: response.status, body, latencyMs };
 }
 
-// Tightened after the first version of this rubric let some questionable
-// output through: Hindi loanwords (e.g. "kal" for tomorrow, common in
-// North Indian Hindi-Urdu but not Tamil) were passing as if they were
-// valid Tanglish, and "close enough" meaning was being accepted as PASS.
+// Tightened once already after the first version let questionable output
+// through (Hindi loanwords like "kal" passing as valid Tanglish, "close
+// enough" meaning accepted as PASS). Tightened a second time (criterion
+// 2's exception list) after that first tightening overcorrected: common
+// English greetings/expressions Tamil speakers genuinely keep in English
+// when texting ("good morning", "happy birthday") were being marked FAIL
+// for not being Tamil vocabulary, same mistake SYSTEM_PROMPT itself
+// avoids (docs/decisions/0007's loanword rule) but the judge didn't know
+// to apply.
 const JUDGE_RUBRIC = `You are grading a Tamil-transliteration (Tanglish) system. Judge whether OUTPUT meets every one of these criteria, given the ORIGINAL English chat message it was supposed to transliterate:
 
 1. Meaning preserved -- OUTPUT conveys the same meaning as ORIGINAL, closely. Minor omissions or additions of meaning are a FAIL, not just wildly wrong meaning.
-2. Written in Tanglish using Tamil vocabulary specifically, not left in plain English. Loanwords from other Indian languages (e.g. Hindi "kal" for tomorrow, "accha" for good/ok) are NOT Tanglish and are a FAIL, even though they might appear in casual Indian-English texting generally -- this system transliterates into Tamil, not a generic Hindi-English mix.
+2. Written in Tanglish using Tamil vocabulary specifically, not left in plain English -- EXCEPT for common English greetings and set expressions Tamil speakers normally keep in English when texting (e.g. "good morning", "good night", "happy birthday", "congrats"/"congratulations", "thank you"/"thanks", "sorry", "ok"). Those correctly staying in English is a PASS, not a FAIL. Loanwords from other Indian languages (e.g. Hindi "kal" for tomorrow, "accha" for good/ok) are still NOT Tanglish and are a FAIL -- this exception is specifically for common English texting expressions, not a general license to leave things untranslated.
 3. Casual register by default -- respectful register only if ORIGINAL is addressed to someone like amma, appa, sir, madam, aunty, or uncle.
 4. OUTPUT is a rewrite of the sender's message, not a reply or answer to it -- a question in ORIGINAL must still be a question in OUTPUT.
 
